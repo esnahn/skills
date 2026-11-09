@@ -32,7 +32,7 @@ if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -cne $expectedHas
 if (-not [Environment]::Is64BitProcess -or -not [Environment]::UserInteractive -or
     [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0 -or
     [Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') { throw 'Use interactive Windows x64 PowerShell with -STA.' }
-if (Get-Process -Name Hwp,Hwp64 -ErrorAction SilentlyContinue) { throw 'Close existing Hancom windows first.' }
+. (Join-Path $PSScriptRoot 'hancom-session.ps1')
 $installRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('Hancom\HwpAutomation\' + $expectedHash.Substring(0,16))
 $destination = Join-Path $installRoot ($moduleName + '.dll')
 if (-not $PSCmdlet.ShouldProcess($destination,"Install verified DLL; update HKCU\$subKey\$moduleName; test RegisterModule")) { return }
@@ -47,20 +47,15 @@ try {
     $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($subKey)
     try { $key.SetValue($moduleName,$destination,[Microsoft.Win32.RegistryValueKind]::String) }
     finally { $key.Dispose() }
-    $hwp = $null
+    # A separate owned Hancom process tests the module; open user windows are left alone.
+    $owner = $null; $exit = $null
     try {
-        $hwp = New-Object -ComObject HWPFrame.HwpObject
-        if (-not $hwp.RegisterModule('FilePathCheckDLL',$moduleName)) { throw 'Hancom rejected the security module.' }
+        $owner = Start-OwnedHwp
+        if (-not $owner.Hwp.RegisterModule('FilePathCheckDLL',$moduleName)) { throw 'Hancom rejected the security module.' }
     } finally {
-        if ($null -ne $hwp) {
-            try { $hwp.Quit() | Out-Null }
-            finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($hwp) | Out-Null }
-        }
-        [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+        $exit = Stop-OwnedHwp $owner
     }
-    $deadline = [DateTime]::UtcNow.AddSeconds(15)
-    while ((Get-Process -Name Hwp,Hwp64 -ErrorAction SilentlyContinue) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 200 }
-    if (Get-Process -Name Hwp,Hwp64 -ErrorAction SilentlyContinue) { throw 'Hancom did not exit normally; registration will be restored.' }
+    if ($exit -eq 'terminated') { throw 'Owned Hancom did not exit normally; registration will be restored.' }
 } catch {
     $primary = $_
     if ($mutationStarted) {

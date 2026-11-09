@@ -11,6 +11,7 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'hancom-session.ps1')
 
 function Read-Plan([string]$Path) {
     if (-not $Path) { throw 'PlanPath is required.' }
@@ -29,6 +30,21 @@ function Read-Plan([string]$Path) {
         if ($entry.name -notmatch '^.+\{\{[0-9]+\}\}$' -or -not $seen.Add($entry.name)) { throw 'Use unique indexed field names, e.g. applicant{{0}}.' }
     }
     return $plan
+}
+function Open-SharedRead([string]$Path) {
+    # Hancom keeps open documents locked; read-share lets us still read the saved file.
+    return [IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]'ReadWrite, Delete')
+}
+function Get-SharedFileHash([string]$Path) {
+    $stream = Open-SharedRead $Path
+    try { return (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash } finally { $stream.Dispose() }
+}
+function Copy-SharedFile([string]$Source, [string]$Destination) {
+    $reader = Open-SharedRead $Source
+    try {
+        $writer = [IO.File]::Open($Destination,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+        try { $reader.CopyTo($writer) } finally { $writer.Dispose() }
+    } finally { $reader.Dispose() }
 }
 function Normalize-Text([string]$Text) { return $Text.Replace("`r`n", "`n").Replace("`r", "`n") }
 function Write-JsonFile($Value, [string]$Path) {
@@ -111,7 +127,6 @@ if ($Mode -in @('Fill','Edit') -and [IO.Path]::GetExtension($output) -ine '.hwp'
 if ($env:OS -ne 'Windows_NT' -or -not [Environment]::Is64BitProcess -or
     -not [Environment]::UserInteractive -or [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0 -or
     [Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') { throw 'Use interactive Windows x64 PowerShell with -STA.' }
-if (Get-Process -Name Hwp,Hwp64 -ErrorAction SilentlyContinue) { throw 'Close existing Hancom windows before this isolated operation.' }
 $moduleKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\HNC\HwpAutomation\Modules',$false)
 try {
     if ($null -eq $moduleKey) { throw 'Hancom security module is not registered; user setup is required.' }
@@ -125,16 +140,17 @@ if ($Mode -eq 'Edit') {
         if (-not (Get-Command $command -CommandType Function -ErrorAction SilentlyContinue)) { throw "TaskScript must define $command." }
     }
 }
-$sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+$sourceHash = Get-SharedFileHash $source
 if ($Mode -eq 'Fill' -and $sourceHash -ine $plan.sourceSha256) { throw 'Plan source hash mismatch; inspect this document again.' }
-$hwp = $null; $temporary = $null; $success = $false
+$owner = $null; $hwp = $null; $temporary = $null; $success = $false
 try {
-    $openPath = $source
-    if ($Mode -in @('Fill','Edit')) {
-        $temporary = Join-Path ([IO.Path]::GetDirectoryName($output)) ('.hwp-edit-' + [Guid]::NewGuid().ToString('N') + '.hwp')
-        [IO.File]::Copy($source,$temporary,$false); $openPath = $temporary
-    } else { [IO.Directory]::CreateDirectory($output) | Out-Null }
-    $hwp = New-Object -ComObject HWPFrame.HwpObject
+    # Hancom always works on a private snapshot, so a source open in the user's Hancom is fine.
+    $workDirectory = if ($Mode -in @('Fill','Edit')) { [IO.Path]::GetDirectoryName($output) } else { [IO.Directory]::CreateDirectory($output).FullName }
+    $temporary = Join-Path $workDirectory ('.hwp-edit-' + [Guid]::NewGuid().ToString('N') + '.hwp')
+    Copy-SharedFile $source $temporary
+    if ((Get-SharedFileHash $temporary) -cne $sourceHash) { throw 'Source changed while it was being copied; try again.' }
+    $openPath = $temporary
+    $owner = Start-OwnedHwp; $hwp = $owner.Hwp
     if (-not $hwp.RegisterModule('FilePathCheckDLL','FilePathCheckerModuleExample')) { throw 'RegisterModule failed.' }
     $hwp.XHwpWindows.Item(0).Visible = $false
     if (-not $hwp.Open($openPath,'HWP','lock:false;forceopen:true;suspendpassword:true;versionwarning:false')) { throw 'HWP open failed.' }
@@ -191,17 +207,11 @@ try {
     $success = $true
 } finally {
     try {
-        if ($null -ne $hwp) {
-            try { $hwp.Clear(1) | Out-Null } finally {
-                try { $hwp.Quit() | Out-Null } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($hwp) | Out-Null }
-            }
-        }
-        [GC]::Collect(); [GC]::WaitForPendingFinalizers()
-        $deadline = [DateTime]::UtcNow.AddSeconds(15)
-        while ((Get-Process -Name Hwp,Hwp64 -ErrorAction SilentlyContinue) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 200 }
-        if (Get-Process -Name Hwp,Hwp64 -ErrorAction SilentlyContinue) { throw 'Hancom did not exit normally; output was not published.' }
-        if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -cne $sourceHash) { throw 'Source changed; output was not published.' }
-        if ($success -and $temporary) { [IO.File]::Move($temporary,$output) }
+        # Only the Hancom process this run started is closed; preexisting windows stay open.
+        $hwp = $null
+        if ((Stop-OwnedHwp $owner -ClearDocument) -eq 'terminated') { throw 'Owned Hancom did not exit normally and was stopped; output was not published.' }
+        if ((Get-SharedFileHash $source) -cne $sourceHash) { throw 'Source changed; output was not published.' }
+        if ($success -and $Mode -in @('Fill','Edit')) { [IO.File]::Move($temporary,$output) }
     } finally {
         if ($temporary -and [IO.File]::Exists($temporary)) { Remove-Item -LiteralPath $temporary }
     }

@@ -16,7 +16,7 @@ This only reads the registry, file existence, and hash. It does not start Hancom
 
 ## Explicit setup from a user-downloaded DLL
 
-Close Hancom first. Preview the operation:
+Open Hancom windows may stay open; the helper tests the module in its own separate Hancom process and closes only that one. Preview the operation:
 
 ```powershell
 pwsh.exe -NoProfile -STA -File "<skill>/scripts/setup-security-module.ps1" -Mode Install -ModulePath "C:\downloads\security-module\FilePathCheckerModuleExample.dll" -WhatIf
