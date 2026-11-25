@@ -15,7 +15,7 @@ When an edit relies on an action, parameter set, or COM member with no entry her
    ```
 
    The runner uses its own Hancom process and saves nothing; the JSON records the build, observations, and any error. (`-InputPath` runs a probe on a copy of a document for one-off investigation; the JSON then names that document, so it stays in scratch.)
-4. Add or update the entry below: how to call it, what was observed (including surprises), `verified: <build>, <date>`, the probe file, and the manual sections consulted. Entries and probe files describe Hancom behavior only; the user's document paths, file names, and content stay out of them.
+4. Add or update the entry below: how to call it, what was observed (including surprises), `verified: <build>, <date>`, the probe file, the manual sections consulted, and the UI name with its menu path and shortcut from the installed help (api-sources.md), or "none (COM only)". Entries and probe files describe Hancom behavior only; the user's document paths, file names, and content stay out of them.
 5. Tell the user which skill files changed; they live in the skills repository and stay uncommitted until the user says otherwise.
 
 Recording is done when the probe file exists, its JSON reports `ok: true` on the current build, and the entry names that build.
@@ -38,6 +38,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/allreplace.ps1`
 - Manual: `ParameterSetTable_2504` § 57 FindReplace (`Direction` 2 = whole document; `IgnoreMessage` suppresses message boxes).
+- UI: 찾아 바꾸기 [편집-찾아 바꾸기] (Ctrl+F2), 모두 바꾸기.
 
 ### Text input and breaks (InsertText, BreakLine, BreakPara, BreakPage, special spaces)
 
@@ -46,6 +47,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/text-input.ps1`
 - Manual: `ActionTable_2504` (InsertText, BreakLine, BreakPara, BreakPage); `ParameterSetTable_2504` § 72 InsertText.
+- UI: typing; Enter (문단 나누기); Shift+Enter (강제 줄 나눔); 쪽 나누기 [쪽-쪽 나누기] (Ctrl+Enter); 고정폭 빈칸 (Alt+Space); 묶음 빈칸 (Ctrl+Alt+Space).
 
 ### PageSetup
 
@@ -54,6 +56,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/page-setup.ps1`
 - Manual: `ActionTable_2504` PageSetup (SecDef); `ParameterSetTable_2504` § 87 PageDef, § 102 SecDef.
+- UI: 편집 용지 [파일-편집 용지] (F7), [기본] tab: 용지 종류, 용지 방향, 용지 여백.
 
 ### PageNumPos, PageHiding
 
@@ -62,6 +65,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/page-number.ps1`
 - Manual: `ParameterSetTable_2504` § 88 PageHiding, § 90 PageNumPos.
+- UI: 쪽 번호 매기기 [쪽-쪽 번호 매기기] (Ctrl+N,P); 감추기 [쪽-감추기] (Ctrl+N,S).
 
 ### CharShape
 
@@ -70,6 +74,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/char-shape.ps1`
 - Manual: `ParameterSetTable_2504` § 13 CharShape.
+- UI: 글자 모양 [서식-글자 모양] (Alt+L); [기본] tab: 글꼴, 크기, 상대 크기 (`Size<Lang>`), 장평 (`Ratio`), 자간 (`Spacing`), 글자 위치 (`Offset`), 진하게, 기울임, 밑줄, 글자 색; [확장] tab: 밑줄 모양.
 
 ### ParagraphShape
 
@@ -78,6 +83,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/para-shape.ps1`
 - Manual: `ParameterSetTable_2504` § 91 ParaShape.
+- UI: 문단 모양 [서식-문단 모양] (Alt+T); [기본] tab: 정렬 방식, 여백, 첫 줄 들여쓰기/내어쓰기 (`Indentation`), 간격 (줄 간격, 문단 위/아래), 줄 나눔 기준 (`BreakNonLatinWord`), 최소 공백 (`Condense`); [확장] tab: 외톨이줄 보호, 한 줄로 입력 (`LineWrap`). Bullets: 글머리표 적용/해제 [서식-글머리표 적용/해제] (Ctrl+Shift+Delete).
 
 ### TableCreate (with TableLowerCell, MoveDocEnd)
 
@@ -86,6 +92,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/table.ps1`
 - Manual: `ActionTable_2504` (TableCreate, TableLowerCell, MoveDocEnd); `ParameterSetTable_2504` § 115 Table, § 116 TableCreation; `HwpAutomation_2504` CreateItemArray.
+- UI: 표 만들기 [입력-표-표 만들기] (Ctrl+N,T), with 글자처럼 취급 (`TreatAsChar`).
 
 ### TablePropertyDialog
 
@@ -94,7 +101,8 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - Observed: the first form changes that table's `OUTSIDEMARGIN`; the second changes only the caret cell's `CELLMARGIN`, with `HasMargin` staying `false`, so the cell keeps following the table's inner margin; set `HasMargin = 1` only when the cell's margin should differ from the table's. `ShapeTableCell.LineWrap` sets the caret cell's `PARALIST` `LineWrap`: 1 = `Squeeze`, 2 = `Keep`; the cell's paragraph shapes stay `Break`. The manual lists no `ShapeType` values; 3 is the cell case observed here.
 - verified: 11.0.0.9166, 2026-11-25
 - Probes: `scripts/probes/cell-margin.ps1`, `scripts/probes/table.ps1`
-- Manual: `ActionTable_2504` TablePropertyDialog (ShapeObject); `ParameterSetTable_2504` § 105 ShapeObject (`ShapeTableCell`, `ShapeType`), § 10 Cell, § 77 ListProperties (`LineWrap`: 0 normal, 1 no wrap, 2 keep one line by adjusting spacing; HWPML names 1 `Squeeze` and 2 `Keep`, so the manual's order and the markup names disagree — confirm by rendering before relying on either). UI: 한글 2020 help, 표/셀 속성: 셀 and 문단 모양: 확장 (see api-sources.md).
+- Manual: `ActionTable_2504` TablePropertyDialog (ShapeObject); `ParameterSetTable_2504` § 105 ShapeObject (`ShapeTableCell`, `ShapeType`), § 10 Cell, § 77 ListProperties (`LineWrap`: 0 normal, 1 no wrap, 2 keep one line by adjusting spacing; HWPML names 1 `Squeeze` and 2 `Keep`, so the manual's order and the markup names disagree — confirm by rendering before relying on either).
+- UI: 표/셀 속성 [표 디자인-표/셀 속성] (P); [여백/캡션] tab: 바깥 여백 (`OutsideMargin`); [셀] tab: 안 여백 지정 (`HasMargin`, `Margin<Side>`), 한 줄로 입력 (`ShapeTableCell.LineWrap`).
 
 ### CellBorderFill
 
@@ -103,6 +111,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/cell-border-fill.ps1`
 - Manual: `ParameterSetTable_2504` § 5 BorderFill, § 11 CellBorderFill, § 32 DrawFillAttr, "기타 정보" 1) 선 종류, 2) 선 굵기.
+- UI: 셀 테두리/배경 [표 디자인-셀 테두리/배경], 각 셀마다 적용; [테두리] and [배경] tabs.
 
 ### Cell navigation and merging
 
@@ -111,6 +120,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/table-cells.ps1`
 - Manual: `ActionTable_2504` (TableColPageUp, TableColBegin, TableRightCell, TableLeftCell, TableCellBlock, TableCellBlockExtend, TableMergeCell).
+- UI: 셀 블록 (F5), 셀 블록 연장 (F5 twice); 셀 합치기 [표 디자인-셀 합치기] (M). The moves are ActionTable's 셀 이동 actions.
 
 ### SetCurFieldName (cell names)
 
@@ -119,6 +129,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/table-cells.ps1`
 - Manual: `HwpAutomation_2504` SetCurFieldName, GetCurFieldName (`hwpFieldCell` = 1).
+- UI: 표/셀 속성 [셀] tab, 필드 이름.
 
 ### TableDeleteRow
 
@@ -127,6 +138,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/table-cells.ps1`
 - Manual: `ActionTable_2504` TableDeleteRow (TableDeleteLine); `ParameterSetTable_2504` § 117 TableDeleteLine.
+- UI: 줄/칸 지우기 [표 디자인-줄/칸 지우기] (Alt+Delete).
 
 ### PutFieldText and MoveToField
 
@@ -135,6 +147,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/fields-and-ranges.ps1`
 - Manual: `HwpAutomation_2504` PutFieldText, MoveToField.
+- UI: none (COM only); the field is the cell's 필드 이름 (see SetCurFieldName).
 
 ### Selecting and deleting ranges
 
@@ -143,6 +156,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/fields-and-ranges.ps1`
 - Manual: `HwpAutomation_2504` SelectText; `ActionTable_2504` (MoveSelDocEnd, MoveListBegin, MoveSelListEnd, Delete, MoveLeft).
+- UI: no single command; a block selection (블록) followed by Delete.
 
 ### InsertPicture
 
@@ -151,6 +165,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/picture.ps1`
 - Manual: `HwpAutomation_2504` InsertPicture; `ParameterSetTable_2504` § 105 ShapeObject.
+- UI: 그림 [입력-그림] (Ctrl+N,I), then the size in the picture's properties.
 
 ### CreatePageImage
 
@@ -159,3 +174,4 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/page-image.ps1` (plain document; the failure needs a richer document to reproduce)
 - Manual: `HwpAutomation_2504` CreatePageImage.
+- UI: none (COM only).
