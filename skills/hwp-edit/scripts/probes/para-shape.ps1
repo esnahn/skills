@@ -50,7 +50,7 @@ function Invoke-HwpProbe {
     $Hwp.HAction.Run('BreakPara') | Out-Null
     $hang = $Hwp.HParameterSet.HParaShape
     $Hwp.HAction.GetDefault('ParagraphShape', $hang.HSet) | Out-Null
-    $hang.LineWrap = 0; $hang.Indentation = -3964
+    $hang.LineWrap = 0; $hang.Indentation = -3964; $hang.BreakNonLatinWord = 0
     $Hwp.HAction.Execute('ParagraphShape', $hang.HSet) | Out-Null
     $Hwp.HAction.GetDefault('InsertText', $insert.HSet) | Out-Null
     $insert.Text = 'hanging'
@@ -76,6 +76,7 @@ function Invoke-HwpProbe {
         lineWrap = $lineWrap
         bullet = [ordered]@{ headingAfterPutBullet = $headingAfterBulletAction; headingAfterClear = $clearedShape.GetAttribute('HeadingType') }
         hangingIndent = $hangingShape.SelectSingleNode('./PARAMARGIN').GetAttribute('Indent')
+        breakNonLatinWordAfterZero = $hangingShape.GetAttribute('BreakNonLatinWord')
         set = [ordered]@{ left = 2000; right = 3000; prev = 400; next = 1600 }
         markup = [ordered]@{
             left = $margin.GetAttribute('Left'); right = $margin.GetAttribute('Right')

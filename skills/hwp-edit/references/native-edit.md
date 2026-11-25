@@ -27,7 +27,7 @@ function Test-HwpEdit {
 }
 ```
 
-The task script is dot-sourced into the runner's scope, and PowerShell variable names ignore case: give script-scope variables a task-specific prefix (`$script:ReplayMarkup`, not `$script:Source`). The runner freezes its own key variables, so a collision stops the run instead of redirecting it. A function that returns a one-element array hands back the element itself, so wrap such results in `@(...)` before indexing.
+The task script is dot-sourced into the runner's scope, and PowerShell variable names ignore case: give script-scope variables a task-specific prefix (`$script:ReplayMarkup`, not `$script:Source`). The runner freezes its own key variables, so a collision stops the run instead of redirecting it. A function that returns a one-element array hands back the element itself, so wrap such results in `@(...)` before indexing. PowerShell also treats curly quotes (‘ ’ “ ”) as string delimiters, and Korean prose is full of them: keep document text in a UTF-8 JSON file beside the task script and read it with `ConvertFrom-Json`.
 
 Run it with `-Mode Edit -TaskScript <path>`. The runner supplies the open working document. The task adapter must not save, open, close, quit, or publish documents itself. It must define BOTH callbacks. `Test-HwpEdit` runs before saving and after reopening; a dummy true callback does not constitute verification.
 

@@ -69,21 +69,21 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 
 ### CharShape
 
-- Call: `HCharShape`; for each language (`Hangul`, `Latin`, `Hanja`, `Japanese`, `Other`, `Symbol`, `User`) `HSet.SetItem` `FaceName<Lang>`, `FontType<Lang>`, `Ratio<Lang>`, `Spacing<Lang>`, `Size<Lang>` (relative size, `RELSIZE`), `Offset<Lang>` (`CHAROFFSET`); `Height` (HWPUNIT, 100 = 1 pt), `Bold`, `Italic`, `UnderlineType` (1 bottom, 2 centre, 3 top) with `UnderlineShape = 0` (solid) and `UnderlineColor`, `SuperScript`, `SubScript`, `TextColor` (0x00BBGGRR); execute before typing.
-- Observed: applies to text typed afterwards and carries into new paragraphs. `FontType` 1 records a TrueType font (`Type="ttf"` in the font list), 2 a Hancom HFT font (`Type="hft"`, e.g. HCI Poppy); copy the type an inspected document shows. `TextColor` is stored as the same integer. Each of the items above shows up as the matching markup (`<ITALIC/>`, `<UNDERLINE Shape="Solid" Type="Bottom"/>`, `<SUPERSCRIPT/>`, `RELSIZE`, `CHAROFFSET`). Some downloaded documents carry `<STRIKEOUT Type="Continuous" Shape="3D"/>` on every shape and render no strikeout; a blank document's shapes carry none, so leave it unset when rebuilding.
-- verified: 11.0.0.9166, 2026-11-25
-- Probe: `scripts/probes/char-shape.ps1`
+- Call: `HCharShape`; for each language (`Hangul`, `Latin`, `Hanja`, `Japanese`, `Other`, `Symbol`, `User`) `HSet.SetItem` `FaceName<Lang>`, `FontType<Lang>`, `Ratio<Lang>`, `Spacing<Lang>`, `Size<Lang>` (relative size, `RELSIZE`), `Offset<Lang>` (`CHAROFFSET`); `Height` (HWPUNIT, 100 = 1 pt), `Bold`, `Italic`, `UnderlineType` (1 bottom, 2 centre, 3 top) with `UnderlineShape = 0` (solid) and `UnderlineColor`, `SuperScript`, `SubScript`, `TextColor` (0x00BBGGRR); execute before typing, or with a block selected (see Selecting and deleting ranges) to change existing text.
+- Observed: applies to text typed afterwards and carries into new paragraphs. On a selected block, `Execute` applies only the items set and splits runs at the block's edges: `Bold` on three letters made one bold run, `SuperScript` on one letter one superscript run, and `Spacing<Lang>` over a block holding normal, bold and superscript runs changed the spacing of all three and kept bold and superscript. `FontType` 1 records a TrueType font (`Type="ttf"` in the font list), 2 a Hancom HFT font (`Type="hft"`, e.g. HCI Poppy); copy the type an inspected document shows. `TextColor` is stored as the same integer. Each of the items above shows up as the matching markup (`<ITALIC/>`, `<UNDERLINE Shape="Solid" Type="Bottom"/>`, `<SUPERSCRIPT/>`, `RELSIZE`, `CHAROFFSET`). Some downloaded documents carry `<STRIKEOUT Type="Continuous" Shape="3D"/>` on every shape and render no strikeout; a blank document's shapes carry none, so leave it unset when rebuilding.
+- verified: 11.0.0.9166, 2026-11-25; on a block 2026-11-26
+- Probes: `scripts/probes/char-shape.ps1`, `scripts/probes/char-shape-selection.ps1`
 - Manual: `ParameterSetTable_2504` § 13 CharShape.
-- UI: 글자 모양 [서식-글자 모양] (Alt+L); [기본] tab: 글꼴, 크기, 상대 크기 (`Size<Lang>`), 장평 (`Ratio`), 자간 (`Spacing`), 글자 위치 (`Offset`), 진하게, 기울임, 밑줄, 글자 색; [확장] tab: 밑줄 모양.
+- UI: 글자 모양 [서식-글자 모양] (Alt+L); [기본] tab: 글꼴, 크기, 상대 크기 (`Size<Lang>`), 장평 (`Ratio`), 자간 (`Spacing`), 글자 위치 (`Offset`), 진하게, 기울임, 밑줄, 글자 색; [확장] tab: 밑줄 모양. On a block: 진하게 (Ctrl+B, Alt+Shift+B), 위 첨자 (Alt+Shift+P).
 
 ### ParagraphShape
 
 - Call: `HParaShape`: `AlignType` (0 justify, 1 left, 2 right, 3 centre, 4 distribute, 5 divide), `LineSpacingType = 0` with `LineSpacing` in percent, `LeftMargin`, `RightMargin`, `Indentation`, `PrevSpacing`, `NextSpacing`, `Condense`, `WidowOrphan`, `BreakNonLatinWord`, `LineWrap`.
-- Observed: margins and spacing (the manual's "URC") are stored unchanged, as the same numbers `PARAMARGIN` shows, so values from an inspected document copy across directly. `LineWrap`, which the manual mislabels as a line-height flag: 0 = `Break`, 1 = `Squeeze` (letter spacing tightens to keep the paragraph on one line), 2 = shown empty in HWPML. In the 한글 2020 UI, `Squeeze` is "한 줄로 입력" on the [확장] tab of 문단 모양, stored in `PARASHAPE`. The [셀] tab of 표/셀 속성 has an option with the same name that is stored on the cell's `PARALIST` instead (see TablePropertyDialog). Copy whichever one the inspected document uses. A negative `Indentation` is a hanging indent and is stored unchanged (`Indent="-3964"`). `PutBullet` sets `HeadingType` 3 (bullet); `HeadingType = 0` removes a bullet or number heading. Applies to the caret paragraph and carries into following ones.
-- verified: 11.0.0.9166, 2026-11-25
+- Observed: margins and spacing (the manual's "URC") are stored unchanged, as the same numbers `PARAMARGIN` shows, so values from an inspected document copy across directly. `LineWrap`, which the manual mislabels as a line-height flag: 0 = `Break`, 1 = `Squeeze` (letter spacing tightens to keep the paragraph on one line), 2 = shown empty in HWPML. In the 한글 2020 UI, `Squeeze` is "한 줄로 입력" on the [확장] tab of 문단 모양, stored in `PARASHAPE`. The [셀] tab of 표/셀 속성 has an option with the same name that is stored on the cell's `PARALIST` instead (see TablePropertyDialog). Copy whichever one the inspected document uses. A negative `Indentation` is a hanging indent and is stored unchanged (`Indent="-3964"`). `PutBullet` sets `HeadingType` 3 (bullet); `HeadingType = 0` removes a bullet or number heading. `BreakNonLatinWord` 1 is stored as `true` (Korean words may split across lines) and 0 as `false` (lines break between words, and justified lines spread the spaces instead). Applies to the caret paragraph and carries into following ones.
+- verified: 11.0.0.9166, 2026-11-26
 - Probe: `scripts/probes/para-shape.ps1`
 - Manual: `ParameterSetTable_2504` § 91 ParaShape.
-- UI: 문단 모양 [서식-문단 모양] (Alt+T); [기본] tab: 정렬 방식, 여백, 첫 줄 들여쓰기/내어쓰기 (`Indentation`), 간격 (줄 간격, 문단 위/아래), 줄 나눔 기준 (`BreakNonLatinWord`), 최소 공백 (`Condense`); [확장] tab: 외톨이줄 보호, 한 줄로 입력 (`LineWrap`). Bullets: 글머리표 적용/해제 [서식-글머리표 적용/해제] (Ctrl+Shift+Delete).
+- UI: 문단 모양 [서식-문단 모양] (Alt+T); [기본] tab: 정렬 방식, 여백, 첫 줄 들여쓰기/내어쓰기 (`Indentation`), 간격 (줄 간격, 문단 위/아래), 줄 나눔 기준 한글 단위 글자 (1) / 어절 (0) (`BreakNonLatinWord`), 최소 공백 (`Condense`); [확장] tab: 외톨이줄 보호, 한 줄로 입력 (`LineWrap`). Bullets: 글머리표 적용/해제 [서식-글머리표 적용/해제] (Ctrl+Shift+Delete).
 
 ### TableCreate (with TableLowerCell, MoveDocEnd)
 
@@ -151,12 +151,12 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 
 ### Selecting and deleting ranges
 
-- Call: root-list paragraphs: `Run('MoveDocBegin')`, `$Hwp.SelectText(startPara, startPos, endPara, endPos)` (end position excluded), `Run('Delete')`. To the end of the document: caret at a paragraph start, `Run('MoveLeft')` to the previous paragraph's end, `Run('MoveSelDocEnd')`, `Run('Delete')`. A cell's contents: `Run('MoveListBegin')`, `Run('MoveSelListEnd')`, `Run('Delete')`, then type.
-- Observed: `SelectText(1, 0, 3, 0)` + `Delete` removed paragraphs 1–2 whole. `MoveLeft` at a paragraph start lands at the end of the previous paragraph, so deleting from there to the document end leaves no empty paragraph; deleting from the paragraph start and then `DeleteBack` left one behind on a real document. The cell sequence empties the cell and keeps its first character shape for the new text.
-- verified: 11.0.0.9166, 2026-11-25
-- Probe: `scripts/probes/fields-and-ranges.ps1`
-- Manual: `HwpAutomation_2504` SelectText; `ActionTable_2504` (MoveSelDocEnd, MoveListBegin, MoveSelListEnd, Delete, MoveLeft).
-- UI: no single command; a block selection (블록) followed by Delete.
+- Call: root-list paragraphs: `Run('MoveDocBegin')`, `$Hwp.SelectText(startPara, startPos, endPara, endPos)` (end position excluded), `Run('Delete')`. To the end of the document: caret at a paragraph start, `Run('MoveLeft')` to the previous paragraph's end, `Run('MoveSelDocEnd')`, `Run('Delete')`. A cell's contents: `Run('MoveListBegin')`, `Run('MoveSelListEnd')`, `Run('Delete')`, then type. Part of a paragraph: `SelectText(para, start, para, end)`, confirm the block with `[string]$Hwp.GetTextFile('TEXT', 'saveblock')` before acting on it, and drop it with `Run('Cancel')`.
+- Observed: `SelectText(1, 0, 3, 0)` + `Delete` removed paragraphs 1–2 whole. `MoveLeft` at a paragraph start lands at the end of the previous paragraph, so deleting from there to the document end leaves no empty paragraph; deleting from the paragraph start and then `DeleteBack` left one behind on a real document. The cell sequence empties the cell and keeps its first character shape for the new text. Positions count each control as 8 (the section and column definitions at the start of a document's first paragraph put its first character at 16) and each inline element as 1 (고정폭 빈칸 `<FWSPACE/>`, 강제 줄 나눔 `<LINEBREAK/>`); `InnerText` of the markup skips those elements, so count them when computing positions from HWPML. `SelectText` returns `True` even when its positions select nothing; `saveblock` then returns empty text. Text typed after deleting part of a paragraph takes the shape of the character before the caret, not that of the deleted text. `saveblock` text kept curly quotes and 「」 intact.
+- verified: 11.0.0.9166, 2026-11-25; within a paragraph 2026-11-26
+- Probes: `scripts/probes/fields-and-ranges.ps1`, `scripts/probes/char-shape-selection.ps1`
+- Manual: `HwpAutomation_2504` SelectText, GetTextFile (`saveblock`: the selected block only; not while an object is selected); `ActionTable_2504` (MoveSelDocEnd, MoveListBegin, MoveSelListEnd, Delete, MoveLeft, Cancel).
+- UI: 블록 설정 (F3, or drag), then Delete; 블록 해제 (Esc).
 
 ### InsertPicture
 
