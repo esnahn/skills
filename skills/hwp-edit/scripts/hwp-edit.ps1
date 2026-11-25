@@ -119,11 +119,15 @@ if ($Mode -in @('Fill','ValidatePlan')) { $plan = Read-Plan $PlanPath }
 if ($Mode -eq 'ValidatePlan') { Write-Output 'Plan valid; Hancom was not started.'; return }
 if (-not $InputPath -or -not $OutputPath) { throw 'InputPath and OutputPath are required.' }
 $source = (Resolve-Path -LiteralPath $InputPath).Path
-if (-not [IO.File]::Exists($source) -or [IO.Path]::GetExtension($source) -ine '.hwp') { throw 'Input must be an existing .hwp file.' }
+# Hancom format names per extension; open, save and reopen all use the source's own format.
+$documentFormats = @{ '.hwp' = 'HWP'; '.hwpx' = 'HWPX' }
+$extension = [IO.Path]::GetExtension($source).ToLowerInvariant()
+if (-not [IO.File]::Exists($source) -or -not $documentFormats.ContainsKey($extension)) { throw 'Input must be an existing .hwp or .hwpx file.' }
+$format = $documentFormats[$extension]
 $output = [IO.Path]::GetFullPath($OutputPath)
 if (Test-Path -LiteralPath $output) { throw 'Output already exists; choose a new path.' }
 if (-not [IO.Directory]::Exists([IO.Path]::GetDirectoryName($output))) { throw 'Output parent directory must exist.' }
-if ($Mode -in @('Fill','Edit') -and [IO.Path]::GetExtension($output) -ine '.hwp') { throw 'Edited output must end in .hwp.' }
+if ($Mode -in @('Fill','Edit') -and [IO.Path]::GetExtension($output) -ine $extension) { throw "Edited output must keep the input extension ($extension); format conversion is not supported." }
 if ($env:OS -ne 'Windows_NT' -or -not [Environment]::Is64BitProcess -or
     -not [Environment]::UserInteractive -or [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0 -or
     [Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') { throw 'Use interactive Windows x64 PowerShell with -STA.' }
@@ -146,14 +150,14 @@ $owner = $null; $hwp = $null; $temporary = $null; $success = $false
 try {
     # Hancom always works on a private snapshot, so a source open in the user's Hancom is fine.
     $workDirectory = if ($Mode -in @('Fill','Edit')) { [IO.Path]::GetDirectoryName($output) } else { [IO.Directory]::CreateDirectory($output).FullName }
-    $temporary = Join-Path $workDirectory ('.hwp-edit-' + [Guid]::NewGuid().ToString('N') + '.hwp')
+    $temporary = Join-Path $workDirectory ('.hwp-edit-' + [Guid]::NewGuid().ToString('N') + $extension)
     Copy-SharedFile $source $temporary
     if ((Get-SharedFileHash $temporary) -cne $sourceHash) { throw 'Source changed while it was being copied; try again.' }
     $openPath = $temporary
     $owner = Start-OwnedHwp; $hwp = $owner.Hwp
     if (-not $hwp.RegisterModule('FilePathCheckDLL','FilePathCheckerModuleExample')) { throw 'RegisterModule failed.' }
     $hwp.XHwpWindows.Item(0).Visible = $false
-    if (-not $hwp.Open($openPath,'HWP','lock:false;forceopen:true;suspendpassword:true;versionwarning:false')) { throw 'HWP open failed.' }
+    if (-not $hwp.Open($openPath,$format,'lock:false;forceopen:true;suspendpassword:true;versionwarning:false')) { throw "$format open failed." }
     if ($Mode -eq 'Inspect') {
         $xml = Read-Markup $hwp
         $xml.Save((Join-Path $output 'document.xml'))
@@ -195,9 +199,9 @@ try {
             Assert-Fields $hwp $plan $true
             Assert-ProtectedFields $hwp $fieldSnapshot $plan
         } else { Invoke-HwpEdit -Hwp $hwp | Out-Null; Assert-Task $hwp }
-        if (-not $hwp.SaveAs($temporary,'HWP','')) { throw 'Save failed.' }
+        if (-not $hwp.SaveAs($temporary,$format,'')) { throw 'Save failed.' }
         $hwp.Clear(1) | Out-Null
-        if (-not $hwp.Open($temporary,'HWP','lock:false;forceopen:true;suspendpassword:true;versionwarning:false')) { throw 'Reopen failed.' }
+        if (-not $hwp.Open($temporary,$format,'lock:false;forceopen:true;suspendpassword:true;versionwarning:false')) { throw 'Reopen failed.' }
         if ($Mode -eq 'Fill') {
             Assert-Fields $hwp $plan $true
             Assert-ProtectedFields $hwp $fieldSnapshot $plan

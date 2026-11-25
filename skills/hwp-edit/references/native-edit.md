@@ -37,6 +37,7 @@ Useful native APIs, subject to checking against installed Hancom documentation:
 - `GetPos` / `SetPos`: native list, paragraph, character positions discovered from the current document. Re-discover after operations that change structure.
 - `InitScan` / `GetText` / `MovePos(201,0,0)` / `ReleaseScan`: discover scanned-text positions; confirm exact signatures in the local API docs before implementing by-ref calls.
 - `MovePos(100..107,0,0)`: documented cell-direction movements; merged cells are not a rectangular spreadsheet, and transitions need postcondition checks.
+- `HAction.Execute('AllReplace', HParameterSet.HFindReplace.HSet)` with `FindString`, `ReplaceString`, `IgnoreMessage = 1`, `Direction = 2`: whole-document replacement after confirming the occurrence count. It returned `False` even after a successful replacement (live check, 2026-11-25), so verify by re-reading the text rather than trusting the return value.
 - `SelectText`: select a verified range within its current list; do not select across a cell boundary or a table control. Insert through the `InsertText` action, inheriting the target formatting.
 
 Before editing an unnamed blank cell, prove its owning table and adjacent label from native control/cell context and the rendered page. Blank text alone is never a unique selector. If multiple paragraphs or controls are present, preserve them; do not select the whole cell casually. For checkbox glyphs, inspect the document's actual glyph/font rather than replacing controls with an assumed Unicode mark.
