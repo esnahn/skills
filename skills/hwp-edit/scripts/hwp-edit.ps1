@@ -31,25 +31,7 @@ function Read-Plan([string]$Path) {
     }
     return $plan
 }
-function Open-SharedRead([string]$Path) {
-    # Hancom keeps open documents locked; read-share lets us still read the saved file.
-    return [IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]'ReadWrite, Delete')
-}
-function Get-SharedFileHash([string]$Path) {
-    $stream = Open-SharedRead $Path
-    try { return (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash } finally { $stream.Dispose() }
-}
-function Copy-SharedFile([string]$Source, [string]$Destination) {
-    $reader = Open-SharedRead $Source
-    try {
-        $writer = [IO.File]::Open($Destination,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
-        try { $reader.CopyTo($writer) } finally { $writer.Dispose() }
-    } finally { $reader.Dispose() }
-}
 function Normalize-Text([string]$Text) { return $Text.Replace("`r`n", "`n").Replace("`r", "`n") }
-function Write-JsonFile($Value, [string]$Path) {
-    [IO.File]::WriteAllText($Path, (ConvertTo-Json -InputObject $Value -Depth 40), [Text.UTF8Encoding]::new($false))
-}
 function Read-Markup($Hwp) {
     $xml = New-Object Xml.XmlDocument
     $xml.PreserveWhitespace = $true
@@ -119,24 +101,14 @@ if ($Mode -in @('Fill','ValidatePlan')) { $plan = Read-Plan $PlanPath }
 if ($Mode -eq 'ValidatePlan') { Write-Output 'Plan valid; Hancom was not started.'; return }
 if (-not $InputPath -or -not $OutputPath) { throw 'InputPath and OutputPath are required.' }
 $source = (Resolve-Path -LiteralPath $InputPath).Path
-# Hancom format names per extension; open, save and reopen all use the source's own format.
-$documentFormats = @{ '.hwp' = 'HWP'; '.hwpx' = 'HWPX' }
+if (-not [IO.File]::Exists($source)) { throw 'Input must be an existing .hwp or .hwpx file.' }
+$format = Get-HwpDocumentFormat $source
 $extension = [IO.Path]::GetExtension($source).ToLowerInvariant()
-if (-not [IO.File]::Exists($source) -or -not $documentFormats.ContainsKey($extension)) { throw 'Input must be an existing .hwp or .hwpx file.' }
-$format = $documentFormats[$extension]
 $output = [IO.Path]::GetFullPath($OutputPath)
 if (Test-Path -LiteralPath $output) { throw 'Output already exists; choose a new path.' }
 if (-not [IO.Directory]::Exists([IO.Path]::GetDirectoryName($output))) { throw 'Output parent directory must exist.' }
 if ($Mode -in @('Fill','Edit') -and [IO.Path]::GetExtension($output) -ine $extension) { throw "Edited output must keep the input extension ($extension); format conversion is not supported." }
-if ($env:OS -ne 'Windows_NT' -or -not [Environment]::Is64BitProcess -or
-    -not [Environment]::UserInteractive -or [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0 -or
-    [Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') { throw 'Use interactive Windows x64 PowerShell with -STA.' }
-$moduleKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\HNC\HwpAutomation\Modules',$false)
-try {
-    if ($null -eq $moduleKey) { throw 'Hancom security module is not registered; user setup is required.' }
-    $modulePath = [string]$moduleKey.GetValue('FilePathCheckerModuleExample')
-    if (-not [IO.Path]::IsPathRooted($modulePath) -or -not [IO.File]::Exists($modulePath)) { throw 'Registered security DLL is missing.' }
-} finally { if ($null -ne $moduleKey) { $moduleKey.Dispose() } }
+Assert-HwpAutomationHost
 if ($Mode -eq 'Edit') {
     if (-not $TaskScript) { throw 'Edit requires TaskScript defining Invoke-HwpEdit and Test-HwpEdit.' }
     . (Resolve-Path -LiteralPath $TaskScript).Path
@@ -146,18 +118,16 @@ if ($Mode -eq 'Edit') {
 }
 $sourceHash = Get-SharedFileHash $source
 if ($Mode -eq 'Fill' -and $sourceHash -ine $plan.sourceSha256) { throw 'Plan source hash mismatch; inspect this document again.' }
-$owner = $null; $hwp = $null; $temporary = $null; $success = $false
+$owner = $null; $hwp = $null; $temporary = $null; $success = $false; $build = 'unknown'
 try {
     # Hancom always works on a private snapshot, so a source open in the user's Hancom is fine.
     $workDirectory = if ($Mode -in @('Fill','Edit')) { [IO.Path]::GetDirectoryName($output) } else { [IO.Directory]::CreateDirectory($output).FullName }
     $temporary = Join-Path $workDirectory ('.hwp-edit-' + [Guid]::NewGuid().ToString('N') + $extension)
     Copy-SharedFile $source $temporary
     if ((Get-SharedFileHash $temporary) -cne $sourceHash) { throw 'Source changed while it was being copied; try again.' }
-    $openPath = $temporary
     $owner = Start-OwnedHwp; $hwp = $owner.Hwp
-    if (-not $hwp.RegisterModule('FilePathCheckDLL','FilePathCheckerModuleExample')) { throw 'RegisterModule failed.' }
-    $hwp.XHwpWindows.Item(0).Visible = $false
-    if (-not $hwp.Open($openPath,$format,'lock:false;forceopen:true;suspendpassword:true;versionwarning:false')) { throw "$format open failed." }
+    Initialize-OwnedHwp $owner
+    Open-HwpDocument $hwp $temporary $format
     if ($Mode -eq 'Inspect') {
         $xml = Read-Markup $hwp
         $xml.Save((Join-Path $output 'document.xml'))
@@ -175,7 +145,7 @@ try {
             }
             [ordered]@{path=(Get-NodePath $table); cells=@($cells)}
         }
-        Write-JsonFile ([ordered]@{source=$source; sourceSha256=$sourceHash; pages=[int]$hwp.PageCount; fields=@($fields); tables=@($tables)}) (Join-Path $output 'inspection.json')
+        Write-JsonFile ([ordered]@{source=$source; sourceSha256=$sourceHash; hancomBuild=$owner.Build; pages=[int]$hwp.PageCount; fields=@($fields); tables=@($tables)}) (Join-Path $output 'inspection.json')
     } elseif ($Mode -eq 'Render') {
         Add-Type -AssemblyName System.Drawing
         $count = [int]$hwp.PageCount
@@ -189,7 +159,7 @@ try {
             Remove-Item -LiteralPath ($stem+'.bmp')
             [ordered]@{page=$page; path=($stem+'.png')}
         }
-        Write-JsonFile ([ordered]@{source=$source; sourceSha256=$sourceHash; dpi=$Dpi; images=@($images); visuallyReviewed=$false}) (Join-Path $output 'pages.json')
+        Write-JsonFile ([ordered]@{source=$source; sourceSha256=$sourceHash; hancomBuild=$owner.Build; dpi=$Dpi; images=@($images); visuallyReviewed=$false}) (Join-Path $output 'pages.json')
     } else {
         $geometry = Get-Geometry (Read-Markup $hwp)
         if ($Mode -eq 'Fill') {
@@ -201,7 +171,7 @@ try {
         } else { Invoke-HwpEdit -Hwp $hwp | Out-Null; Assert-Task $hwp }
         if (-not $hwp.SaveAs($temporary,$format,'')) { throw 'Save failed.' }
         $hwp.Clear(1) | Out-Null
-        if (-not $hwp.Open($temporary,$format,'lock:false;forceopen:true;suspendpassword:true;versionwarning:false')) { throw 'Reopen failed.' }
+        Open-HwpDocument $hwp $temporary $format
         if ($Mode -eq 'Fill') {
             Assert-Fields $hwp $plan $true
             Assert-ProtectedFields $hwp $fieldSnapshot $plan
@@ -213,6 +183,7 @@ try {
     try {
         # Only the Hancom process this run started is closed; preexisting windows stay open.
         $hwp = $null
+        if ($null -ne $owner) { $build = $owner.Build }
         if ((Stop-OwnedHwp $owner -ClearDocument) -eq 'terminated') { throw 'Owned Hancom did not exit normally and was stopped; output was not published.' }
         if ((Get-SharedFileHash $source) -cne $sourceHash) { throw 'Source changed; output was not published.' }
         if ($success -and $Mode -in @('Fill','Edit')) { [IO.File]::Move($temporary,$output) }
@@ -220,4 +191,4 @@ try {
         if ($temporary -and [IO.File]::Exists($temporary)) { Remove-Item -LiteralPath $temporary }
     }
 }
-Write-Output "Completed $Mode`: $output"
+Write-Output "Completed $Mode (Hancom $build): $output"

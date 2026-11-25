@@ -1,4 +1,4 @@
-# Owned Hancom COM session helpers (dot-source this file).
+# Shared Hancom COM helpers (dot-source this file).
 # Each run starts its own HWP process and only ever closes that process.
 # Hancom windows the user already has open are recorded and never touched.
 Set-StrictMode -Version Latest
@@ -8,6 +8,49 @@ if (-not ('HwpEdit.NativeWindow' -as [type])) {
 [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
 public static extern uint GetWindowThreadProcessId(System.IntPtr hWnd, out uint processId);
 '@
+}
+
+function Assert-HwpAutomationHost {
+    if ($env:OS -ne 'Windows_NT' -or -not [Environment]::Is64BitProcess -or
+        -not [Environment]::UserInteractive -or [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0 -or
+        [Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') { throw 'Use interactive Windows x64 PowerShell with -STA.' }
+    $moduleKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\HNC\HwpAutomation\Modules',$false)
+    try {
+        if ($null -eq $moduleKey) { throw 'Hancom security module is not registered; user setup is required.' }
+        $modulePath = [string]$moduleKey.GetValue('FilePathCheckerModuleExample')
+        if (-not [IO.Path]::IsPathRooted($modulePath) -or -not [IO.File]::Exists($modulePath)) { throw 'Registered security DLL is missing.' }
+    } finally { if ($null -ne $moduleKey) { $moduleKey.Dispose() } }
+}
+
+function Get-HwpDocumentFormat([string]$Path) {
+    # Hancom format name per extension; open, save and reopen all use the document's own format.
+    switch ([IO.Path]::GetExtension($Path).ToLowerInvariant()) {
+        '.hwp' { return 'HWP' }
+        '.hwpx' { return 'HWPX' }
+        default { throw 'Document must be an existing .hwp or .hwpx file.' }
+    }
+}
+
+function Open-SharedRead([string]$Path) {
+    # Hancom keeps open documents locked; read-share lets us still read the saved file.
+    return [IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]'ReadWrite, Delete')
+}
+
+function Get-SharedFileHash([string]$Path) {
+    $stream = Open-SharedRead $Path
+    try { return (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash } finally { $stream.Dispose() }
+}
+
+function Copy-SharedFile([string]$Source, [string]$Destination) {
+    $reader = Open-SharedRead $Source
+    try {
+        $writer = [IO.File]::Open($Destination,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+        try { $reader.CopyTo($writer) } finally { $writer.Dispose() }
+    } finally { $reader.Dispose() }
+}
+
+function Write-JsonFile($Value, [string]$Path) {
+    [IO.File]::WriteAllText($Path, (ConvertTo-Json -InputObject $Value -Depth 40), [Text.UTF8Encoding]::new($false))
 }
 
 function Get-HwpProcessTable {
@@ -38,17 +81,32 @@ function Start-OwnedHwp {
         }
         $process = Get-Process -Id $processId
         if ($process.ProcessName -notin @('Hwp','Hwp64')) { throw "Unexpected COM server process: $($process.ProcessName)" }
+        # The build that verified facts are tagged with (references/verified-api.md).
+        $executable = [string]$process.Path
+        $build = if ($executable) { [string](Get-Item -LiteralPath $executable).VersionInfo.FileVersion } else { '' }
         return [pscustomobject]@{
             Hwp = $hwp
             ProcessId = [int]$processId
             StartTime = $process.StartTime.ToFileTimeUtc()
             Preexisting = @($before.Keys)
+            Executable = $executable
+            Build = $(if ($build) { $build } else { 'unknown' })
         }
     } catch {
         # Release our reference only; never Clear/Quit a process we do not own.
         [Runtime.InteropServices.Marshal]::FinalReleaseComObject($hwp) | Out-Null
         throw
     }
+}
+
+function Initialize-OwnedHwp($Owner) {
+    # The security module must be accepted before any document is opened.
+    if (-not $Owner.Hwp.RegisterModule('FilePathCheckDLL','FilePathCheckerModuleExample')) { throw 'RegisterModule failed.' }
+    $Owner.Hwp.XHwpWindows.Item(0).Visible = $false
+}
+
+function Open-HwpDocument($Hwp, [string]$Path, [string]$Format) {
+    if (-not $Hwp.Open($Path,$Format,'lock:false;forceopen:true;suspendpassword:true;versionwarning:false')) { throw "$Format open failed: $Path" }
 }
 
 function Stop-OwnedHwp($Owner, [switch]$ClearDocument) {

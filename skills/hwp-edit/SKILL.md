@@ -9,11 +9,21 @@ No Markdown manuscript, Pandoc, IR, or report template is required. Work from th
 
 Both `.hwp` and `.hwpx` are accepted; "HWP" below covers both. Hancom opens, saves, and reopens the document in its own format, so the edited output must keep the input's extension (no format conversion).
 
+## Machine setup
+
+Finish this before the first edit on a machine; repeat step 3 whenever a runner reports a Hancom build that no ledger entry lists.
+
+1. Hancom and security module: `scripts/setup-security-module.ps1 -Mode Check`; for anything missing, follow [security-module.md](references/security-module.md).
+2. API manuals: `scripts/setup-api-manuals.ps1 -Mode Check`. For any manual not `Verified`, ask the user either for a folder holding copies (`-Mode Install -From <folder>`) or for approval to download from the official archive (names, source, and sizes in [api-sources.md](references/api-sources.md); `-Mode Install -Download`).
+3. Probes: run every `scripts/probes/*.ps1` through `scripts/hwp-probe.ps1` and update [verified-api.md](references/verified-api.md) for this build.
+
+Setup is done when the security check passes, all four manuals report `Verified`, and every ledger entry lists the current build.
+
 ## Workflow
 
 1. Inspect the supplied HWP using `scripts/hwp-edit.ps1 -Mode Inspect` to export HWPML, text, indexed fields, and nested table/cell inventory. Read the relevant paragraphs, styles, controls, and surrounding context; use rendered pages where layout matters. Inventory XML paths are not COM cursor coordinates.
 2. Identify the exact requested changes and protected content. For text edits, confirm the original passage and occurrence count. For table forms, map labels to their actual cells; account for merged and nested cells. Do not invent missing facts.
-3. Use `-Mode Edit -TaskScript ...` for general text, paragraph, character-formatting, or native table operations. Read [native-edit.md](references/native-edit.md) and create task-specific COM callbacks `Invoke-HwpEdit` and `Test-HwpEdit`. For any action, parameter set, or COM member native-edit.md does not mark verified on the current Hancom build, read [api-sources.md](references/api-sources.md) first. Use `-Mode Fill` with a JSON plan when indexed named fields suffice. Duplicate field names require the explicit `{{n}}` suffix from inspection.
+3. Use `-Mode Edit -TaskScript ...` for general text, paragraph, character-formatting, or native table operations. Read [native-edit.md](references/native-edit.md) and create task-specific COM callbacks `Invoke-HwpEdit` and `Test-HwpEdit`. Every action, parameter set, or COM member a task script calls needs an entry for the current Hancom build in [verified-api.md](references/verified-api.md); for anything missing, follow that file to look it up, probe it, and record it before using it on the user's document. Use `-Mode Fill` with a JSON plan when indexed named fields suffice. Duplicate field names require the explicit `{{n}}` suffix from inspection.
 4. The runner edits a temporary snapshot of the source, saves, closes, reopens, verifies intended edits, checks the source hash, and publishes a separate HWP only on success. It preserves table geometry by default. When the user requests table structure/width changes, use `-AllowTableGeometryChange` in Edit mode and make the task verifier assert the requested geometry and protected surrounding structure. Do not disable preservation checks just to make an unexpected change pass.
 5. Render the saved output with `-Mode Render`, inspect the affected PNG pages and spillover pages, and enlarge relevant regions when necessary. Check text clipping, wrapping, spacing, fonts, alignment, cell overflow, object overlap, and pagination. Correct through COM and repeat if needed. PDF is unnecessary.
 6. Deliver the edited HWP and a concise account of changes or unresolved entries. State which pages were visually checked. Syntax checks, XML comparisons, and successful saving alone are not visual verification.

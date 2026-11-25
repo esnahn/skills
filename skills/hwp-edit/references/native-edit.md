@@ -2,7 +2,7 @@
 
 ## Body text and formatting
 
-The Edit runner accepts document-specific COM callbacks; it is not a fixed report generator. Locate paragraphs by verified text and context, inspect their current styles, and apply only the requested change. Confirm occurrence counts before global replacement. Use native search/selection and InsertText for text changes; use documented CharShape/ParagraphShape actions for formatting. Before constructing an action, look up its parameter set through [api-sources.md](api-sources.md) and probe anything not marked verified below on the current build. Do not assume document positions survive an earlier insertion or deletion.
+The Edit runner accepts document-specific COM callbacks; it is not a fixed report generator. Locate paragraphs by verified text and context, inspect their current styles, and apply only the requested change. Confirm occurrence counts before global replacement. Use native search/selection and InsertText for text changes; use documented CharShape/ParagraphShape actions for formatting. Before constructing an action, check [verified-api.md](verified-api.md) for the current build; anything missing there gets looked up, probed, and recorded as that file describes. Do not assume document positions survive an earlier insertion or deletion.
 
 The verification callback must independently re-locate the targets and check the intended text, formatting, or structure before saving and again after reopen. Preserve unrelated sections, headers, footers, images, fields, and native controls. For requested table geometry edits, `-AllowTableGeometryChange` suppresses only the default geometry equality check; the callback must assert the expected replacement geometry and unaffected tables.
 
@@ -37,7 +37,7 @@ Useful native APIs, subject to checking against the sources in [api-sources.md](
 - `GetPos` / `SetPos`: native list, paragraph, character positions discovered from the current document. Re-discover after operations that change structure.
 - `InitScan` / `GetText` / `MovePos(201,0,0)` / `ReleaseScan`: discover scanned-text positions; confirm exact signatures in the local API docs before implementing by-ref calls.
 - `MovePos(100..107,0,0)`: documented cell-direction movements; merged cells are not a rectangular spreadsheet, and transitions need postcondition checks.
-- `HAction.Execute('AllReplace', HParameterSet.HFindReplace.HSet)` with `FindString`, `ReplaceString`, `IgnoreMessage = 1`, `Direction = 2`: whole-document replacement after confirming the occurrence count. It returned `False` even after a successful replacement (verified: 11.0.0.9166, 2026-11-25), so verify by re-reading the text rather than trusting the return value.
+- `AllReplace`: whole-document replacement after confirming the occurrence count; its return value does not report success (see [verified-api.md](verified-api.md)).
 - `SelectText`: select a verified range within its current list; do not select across a cell boundary or a table control. Insert through the `InsertText` action, inheriting the target formatting.
 
 Before editing an unnamed blank cell, prove its owning table and adjacent label from native control/cell context and the rendered page. Blank text alone is never a unique selector. If multiple paragraphs or controls are present, preserve them; do not select the whole cell casually. For checkbox glyphs, inspect the document's actual glyph/font rather than replacing controls with an assumed Unicode mark.
