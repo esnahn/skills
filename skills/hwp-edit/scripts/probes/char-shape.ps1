@@ -15,6 +15,11 @@ function Invoke-HwpProbe {
     # Hancom's own HFT fonts need FontType 2; HCI Poppy ships with Hancom.
     $set.HSet.SetItem('FaceNameLatin', 'HCI Poppy')
     $set.HSet.SetItem('FontTypeLatin', 2)
+    $set.HSet.SetItem('SizeHangul', 90)
+    $set.HSet.SetItem('OffsetHangul', 10)
+    $set.Italic = 1
+    $set.UnderlineType = 1; $set.UnderlineShape = 0; $set.UnderlineColor = 0x000000FF
+    $set.SuperScript = 1
     $set.Height = 2200
     $set.Bold = 1
     $set.TextColor = 0x00ECE3E3
@@ -42,5 +47,8 @@ function Invoke-HwpProbe {
         bold = ($null -ne $shape.SelectSingleNode('./BOLD'))
         ratioHangul = $shape.SelectSingleNode('./RATIO').GetAttribute('Hangul')
         spacingHangul = $shape.SelectSingleNode('./CHARSPACING').GetAttribute('Hangul')
+        relSizeHangul = $shape.SelectSingleNode('./RELSIZE').GetAttribute('Hangul')
+        offsetHangul = $shape.SelectSingleNode('./CHAROFFSET').GetAttribute('Hangul')
+        flags = @($shape.ChildNodes | Where-Object { $_.Name -in 'ITALIC','UNDERLINE','SUPERSCRIPT','SUBSCRIPT','STRIKEOUT' } | ForEach-Object { $_.OuterXml })
     }
 }

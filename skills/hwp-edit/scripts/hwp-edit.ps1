@@ -111,6 +111,10 @@ if ($Mode -eq 'Create') {
     if ($Mode -in @('Fill','Edit') -and [IO.Path]::GetExtension($output) -ine $extension) { throw "Edited output must keep the input extension ($extension); format conversion is not supported." }
 }
 Assert-HwpAutomationHost
+if ($source) { $sourceHash = Get-SharedFileHash $source }
+# Task scripts are dot-sourced into this scope and variable names ignore case; freezing these makes a
+# colliding name (e.g. $script:Source in a task script) fail loudly instead of redirecting the run.
+foreach ($name in 'source','sourceHash','output','format','extension','plan') { Set-Variable -Name $name -Option ReadOnly }
 if ($Mode -in @('Edit','Create')) {
     if (-not $TaskScript) { throw "$Mode requires TaskScript defining Invoke-HwpEdit and Test-HwpEdit." }
     . (Resolve-Path -LiteralPath $TaskScript).Path
@@ -118,7 +122,6 @@ if ($Mode -in @('Edit','Create')) {
         if (-not (Get-Command $command -CommandType Function -ErrorAction SilentlyContinue)) { throw "TaskScript must define $command." }
     }
 }
-if ($source) { $sourceHash = Get-SharedFileHash $source }
 if ($Mode -eq 'Fill' -and $sourceHash -ine $plan.sourceSha256) { throw 'Plan source hash mismatch; inspect this document again.' }
 $owner = $null; $hwp = $null; $temporary = $null; $success = $false; $build = 'unknown'
 try {
@@ -158,6 +161,9 @@ try {
         Write-JsonFile ([ordered]@{source=$source; sourceSha256=$sourceHash; hancomBuild=$owner.Build; pages=[int]$hwp.PageCount; fields=@($fields); tables=@($tables)}) (Join-Path $output 'inspection.json')
     } elseif ($Mode -eq 'Render') {
         Add-Type -AssemblyName System.Drawing
+        # Long documents lay out later pages lazily; CreatePageImage fails on them until the caret has
+        # visited the end of the document (verified-api.md, CreatePageImage). The snapshot is never saved.
+        $hwp.HAction.Run('MoveDocEnd') | Out-Null
         $count = [int]$hwp.PageCount
         $chosen = if ($Pages -and $Pages.Count) { @($Pages | Select-Object -Unique) } else { @(1..$count) }
         foreach ($page in $chosen) { if ($page -lt 1 -or $page -gt $count) { throw "Invalid page: $page; document has $count pages." } }

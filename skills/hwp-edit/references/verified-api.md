@@ -39,10 +39,10 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - Probe: `scripts/probes/allreplace.ps1`
 - Manual: `ParameterSetTable_2504` § 57 FindReplace (`Direction` 2 = whole document; `IgnoreMessage` suppresses message boxes).
 
-### Text input and breaks (InsertText, BreakLine, BreakPara, BreakPage)
+### Text input and breaks (InsertText, BreakLine, BreakPara, BreakPage, special spaces)
 
-- Call: `HInsertText.Text` with `InsertText`; `$Hwp.HAction.Run('BreakLine' | 'BreakPara' | 'BreakPage')`.
-- Observed: `BreakLine` puts `<LINEBREAK/>` inside the paragraph, which `GetTextFile('TEXT','')` drops (the two lines run together). `BreakPara` starts a paragraph that inherits the current char and paragraph shape. `BreakPage` starts a paragraph marked `PageBreak="true"`. Each `Run` returned `True`.
+- Call: `HInsertText.Text` with `InsertText`; `$Hwp.HAction.Run('BreakLine' | 'BreakPara' | 'BreakPage' | 'InsertFixedWidthSpace' | 'InsertNonBreakingSpace')`.
+- Observed: `BreakLine` puts `<LINEBREAK/>` inside the paragraph, which `GetTextFile('TEXT','')` drops (the two lines run together). `BreakPara` starts a paragraph that inherits the current char and paragraph shape. `BreakPage` starts a paragraph marked `PageBreak="true"`. `InsertFixedWidthSpace` and `InsertNonBreakingSpace` put `<FWSPACE/>` and `<NBSPACE/>` into the text. Each `Run` returned `True`.
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/text-input.ps1`
 - Manual: `ActionTable_2504` (InsertText, BreakLine, BreakPara, BreakPage); `ParameterSetTable_2504` § 72 InsertText.
@@ -65,8 +65,8 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 
 ### CharShape
 
-- Call: `HCharShape`; for each language (`Hangul`, `Latin`, `Hanja`, `Japanese`, `Other`, `Symbol`, `User`) `HSet.SetItem` `FaceName<Lang>`, `FontType<Lang>`, `Ratio<Lang>`, `Spacing<Lang>`; `Height` (HWPUNIT, 100 = 1 pt), `Bold`, `TextColor` (0x00BBGGRR); execute before typing.
-- Observed: applies to text typed afterwards and carries into new paragraphs. `FontType` 1 records a TrueType font (`Type="ttf"` in the font list), 2 a Hancom HFT font (`Type="hft"`, e.g. HCI Poppy); copy the type an inspected document shows. `TextColor` is stored as the same integer.
+- Call: `HCharShape`; for each language (`Hangul`, `Latin`, `Hanja`, `Japanese`, `Other`, `Symbol`, `User`) `HSet.SetItem` `FaceName<Lang>`, `FontType<Lang>`, `Ratio<Lang>`, `Spacing<Lang>`, `Size<Lang>` (relative size, `RELSIZE`), `Offset<Lang>` (`CHAROFFSET`); `Height` (HWPUNIT, 100 = 1 pt), `Bold`, `Italic`, `UnderlineType` (1 bottom, 2 centre, 3 top) with `UnderlineShape = 0` (solid) and `UnderlineColor`, `SuperScript`, `SubScript`, `TextColor` (0x00BBGGRR); execute before typing.
+- Observed: applies to text typed afterwards and carries into new paragraphs. `FontType` 1 records a TrueType font (`Type="ttf"` in the font list), 2 a Hancom HFT font (`Type="hft"`, e.g. HCI Poppy); copy the type an inspected document shows. `TextColor` is stored as the same integer. Each of the items above shows up as the matching markup (`<ITALIC/>`, `<UNDERLINE Shape="Solid" Type="Bottom"/>`, `<SUPERSCRIPT/>`, `RELSIZE`, `CHAROFFSET`). Some downloaded documents carry `<STRIKEOUT Type="Continuous" Shape="3D"/>` on every shape and render no strikeout; a blank document's shapes carry none, so leave it unset when rebuilding.
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/char-shape.ps1`
 - Manual: `ParameterSetTable_2504` § 13 CharShape.
@@ -74,7 +74,7 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 ### ParagraphShape
 
 - Call: `HParaShape`: `AlignType` (0 justify, 1 left, 2 right, 3 centre, 4 distribute, 5 divide), `LineSpacingType = 0` with `LineSpacing` in percent, `LeftMargin`, `RightMargin`, `Indentation`, `PrevSpacing`, `NextSpacing`, `Condense`, `WidowOrphan`, `BreakNonLatinWord`, `LineWrap`.
-- Observed: margins and spacing (the manual's "URC") are stored unchanged, as the same numbers `PARAMARGIN` shows, so values from an inspected document copy across directly. `LineWrap`, which the manual mislabels as a line-height flag: 0 = `Break`, 1 = `Squeeze` (letter spacing tightens to keep the paragraph on one line), 2 = shown empty in HWPML. In the 한글 2020 UI, `Squeeze` is "한 줄로 입력" on the [확장] tab of 문단 모양, stored in `PARASHAPE`. The [셀] tab of 표/셀 속성 has an option with the same name that is stored on the cell's `PARALIST` instead (see TablePropertyDialog). Copy whichever one the inspected document uses. Applies to the caret paragraph and carries into following ones.
+- Observed: margins and spacing (the manual's "URC") are stored unchanged, as the same numbers `PARAMARGIN` shows, so values from an inspected document copy across directly. `LineWrap`, which the manual mislabels as a line-height flag: 0 = `Break`, 1 = `Squeeze` (letter spacing tightens to keep the paragraph on one line), 2 = shown empty in HWPML. In the 한글 2020 UI, `Squeeze` is "한 줄로 입력" on the [확장] tab of 문단 모양, stored in `PARASHAPE`. The [셀] tab of 표/셀 속성 has an option with the same name that is stored on the cell's `PARALIST` instead (see TablePropertyDialog). Copy whichever one the inspected document uses. A negative `Indentation` is a hanging indent and is stored unchanged (`Indent="-3964"`). `PutBullet` sets `HeadingType` 3 (bullet); `HeadingType = 0` removes a bullet or number heading. Applies to the caret paragraph and carries into following ones.
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/para-shape.ps1`
 - Manual: `ParameterSetTable_2504` § 91 ParaShape.
@@ -103,3 +103,59 @@ Re-verifying on a new build (machine setup step 3): run every probe in `scripts/
 - verified: 11.0.0.9166, 2026-11-25
 - Probe: `scripts/probes/cell-border-fill.ps1`
 - Manual: `ParameterSetTable_2504` § 5 BorderFill, § 11 CellBorderFill, § 32 DrawFillAttr, "기타 정보" 1) 선 종류, 2) 선 굵기.
+
+### Cell navigation and merging
+
+- Call, caret in a table: first cell `Run('TableColPageUp')` then `Run('TableColBegin')`; moves `TableRightCell`, `TableLeftCell`, `TableLowerCell`, `TableUpperCell`; merge: caret in the block's top-left cell, `TableCellBlock`, `TableCellBlockExtend`, move to the bottom-right cell, `TableMergeCell`, then `Cancel`.
+- Observed: `TableRightCell` walks grid positions row by row, wrapping to the next row, and returns `False` at the last cell. A merged cell is entered again on every row it spans (a 3-row merge collected text from three visits), so fill a merged table by simulating that walk and writing each cell on its first visit. Merging cells that hold text concatenates their text, so merge while the cells are empty; merging bottom-right spans first keeps the moves from the first cell regular.
+- verified: 11.0.0.9166, 2026-11-25
+- Probe: `scripts/probes/table-cells.ps1`
+- Manual: `ActionTable_2504` (TableColPageUp, TableColBegin, TableRightCell, TableLeftCell, TableCellBlock, TableCellBlockExtend, TableMergeCell).
+
+### SetCurFieldName (cell names)
+
+- Call, caret in the cell: `$Hwp.SetCurFieldName('<name>', 1, '', '')` (option 1 = cell).
+- Observed: the cell gets `Name="<name>"` in markup and appears in `GetFieldList(1, 1)` as `<name>{{0}}`.
+- verified: 11.0.0.9166, 2026-11-25
+- Probe: `scripts/probes/table-cells.ps1`
+- Manual: `HwpAutomation_2504` SetCurFieldName, GetCurFieldName (`hwpFieldCell` = 1).
+
+### TableDeleteRow
+
+- Call, caret in the row: `Run('TableDeleteRow')`.
+- Observed: deletes the caret's row (also with a single-cell block). With a block extended over two rows beside a merged cell it returned `False` and deleted nothing, so delete such rows one at a time and check `RowCount`. A merged cell loses the deleted rows from its span.
+- verified: 11.0.0.9166, 2026-11-25
+- Probe: `scripts/probes/table-cells.ps1`
+- Manual: `ActionTable_2504` TableDeleteRow (TableDeleteLine); `ParameterSetTable_2504` § 117 TableDeleteLine.
+
+### PutFieldText and MoveToField
+
+- Call: `$Hwp.PutFieldText('<name>{{n}}', 'text')`; `$Hwp.MoveToField('<name>{{n}}', $true, $true, $false)` puts the caret at the start of the field without selecting.
+- Observed: on a cell field, `PutFieldText` replaces all of the cell's paragraphs with one paragraph that keeps the shape of the cell's last paragraph (a left- then right-aligned cell came out right-aligned); reset the paragraph shape afterwards when the first and last differ. `MoveToField` returned `True` and is a dependable way into a named cell, from which `Table*Cell` moves reach unnamed neighbours.
+- verified: 11.0.0.9166, 2026-11-25
+- Probe: `scripts/probes/fields-and-ranges.ps1`
+- Manual: `HwpAutomation_2504` PutFieldText, MoveToField.
+
+### Selecting and deleting ranges
+
+- Call: root-list paragraphs: `Run('MoveDocBegin')`, `$Hwp.SelectText(startPara, startPos, endPara, endPos)` (end position excluded), `Run('Delete')`. To the end of the document: caret at a paragraph start, `Run('MoveLeft')` to the previous paragraph's end, `Run('MoveSelDocEnd')`, `Run('Delete')`. A cell's contents: `Run('MoveListBegin')`, `Run('MoveSelListEnd')`, `Run('Delete')`, then type.
+- Observed: `SelectText(1, 0, 3, 0)` + `Delete` removed paragraphs 1–2 whole. `MoveLeft` at a paragraph start lands at the end of the previous paragraph, so deleting from there to the document end leaves no empty paragraph; deleting from the paragraph start and then `DeleteBack` left one behind on a real document. The cell sequence empties the cell and keeps its first character shape for the new text.
+- verified: 11.0.0.9166, 2026-11-25
+- Probe: `scripts/probes/fields-and-ranges.ps1`
+- Manual: `HwpAutomation_2504` SelectText; `ActionTable_2504` (MoveSelDocEnd, MoveListBegin, MoveSelListEnd, Delete, MoveLeft).
+
+### InsertPicture
+
+- Call: `$ctrl = $Hwp.InsertPicture('<path>', $true, 0, $false, $false, 0, 0, 0)` (all eight arguments; width and height are whole millimetres), then `$props = $ctrl.Properties`, `SetItem('Width'|'Height', HWPUNIT)`, `SetItem('TreatAsChar', 1)`, `SetItem('OutsideMargin<Side>', value)`, `$ctrl.Properties = $props`.
+- Observed: six arguments fail ("Cannot find an overload"). The control's `CtrlID` is `gso`. Real size follows the pixels at 96 dpi (200 px = 15000 HWPUNIT); the properties then set the exact `SIZE`. A picture whose markup shows an original size (`OriWidth`/`OriHeight`) different from `IMAGEDIM` or non-zero `XPos`/`YPos` was scaled or cropped in an earlier edit; inserting the same file at the same `SIZE` places it identically but resamples slightly differently (JPG logos differed only inside their boxes).
+- verified: 11.0.0.9166, 2026-11-25
+- Probe: `scripts/probes/picture.ps1`
+- Manual: `HwpAutomation_2504` InsertPicture; `ParameterSetTable_2504` § 105 ShapeObject.
+
+### CreatePageImage
+
+- Call: `$Hwp.CreatePageImage('<file>.bmp', pageIndex, dpi, 24, 'bmp')` after `Run('MoveDocEnd')`.
+- Observed: on a freshly opened five-page press release with tables, pictures and a drawing object, pages 2–5 returned `False` until the caret had visited the document end; a plain 20-page document rendered every page either way. The Render runner therefore moves to the end first.
+- verified: 11.0.0.9166, 2026-11-25
+- Probe: `scripts/probes/page-image.ps1` (plain document; the failure needs a richer document to reproduce)
+- Manual: `HwpAutomation_2504` CreatePageImage.

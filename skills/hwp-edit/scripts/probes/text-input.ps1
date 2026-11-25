@@ -13,15 +13,17 @@ function Invoke-HwpProbe {
     Add-ProbeText 'second'
     $para = $Hwp.HAction.Run('BreakPara')
     Add-ProbeText 'third'
+    $fixed = $Hwp.HAction.Run('InsertFixedWidthSpace')
+    $nonBreaking = $Hwp.HAction.Run('InsertNonBreakingSpace')
     $page = $Hwp.HAction.Run('BreakPage')
     Add-ProbeText 'fourth'
 
     $paragraphs = @((Read-HwpMarkup $Hwp).SelectNodes('//BODY/SECTION/P'))
     return [ordered]@{
-        runReturned = [ordered]@{ BreakLine = [bool]$line; BreakPara = [bool]$para; BreakPage = [bool]$page }
+        runReturned = [ordered]@{ BreakLine = [bool]$line; BreakPara = [bool]$para; InsertFixedWidthSpace = [bool]$fixed; InsertNonBreakingSpace = [bool]$nonBreaking; BreakPage = [bool]$page }
         paragraphs = @($paragraphs | ForEach-Object {
             [ordered]@{
-                text = (-join @($_.SelectNodes('./TEXT/CHAR') | ForEach-Object { $_.InnerText }))
+                text = (-join @($_.SelectNodes('./TEXT/CHAR') | ForEach-Object { foreach ($n in $_.ChildNodes) { if ($n.NodeType -eq 'Element') { "<$($n.Name)>" } else { $n.Value } } }))
                 lineBreaks = $_.SelectNodes('.//LINEBREAK').Count
                 pageBreakAttribute = $_.GetAttribute('PageBreak')
             }
