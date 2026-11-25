@@ -109,6 +109,15 @@ function Open-HwpDocument($Hwp, [string]$Path, [string]$Format) {
     if (-not $Hwp.Open($Path,$Format,'lock:false;forceopen:true;suspendpassword:true;versionwarning:false')) { throw "$Format open failed: $Path" }
 }
 
+function Read-HwpMarkup($Hwp) {
+    # The open document as HWPML; task scripts and probes read shapes and structure back from it.
+    $xml = New-Object Xml.XmlDocument
+    $xml.PreserveWhitespace = $true
+    $xml.XmlResolver = $null
+    $xml.LoadXml([string]$Hwp.GetTextFile('HWPML2X',''))
+    return ,$xml
+}
+
 function Stop-OwnedHwp($Owner, [switch]$ClearDocument) {
     # Returns 'exited' after a normal Quit, 'terminated' when the owned process had to be stopped.
     if ($null -eq $Owner) { return 'none' }

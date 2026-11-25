@@ -1,6 +1,6 @@
 ---
 name: hwp-edit
-description: Read and edit existing HWP and HWPX documents through Hancom COM on Windows, including body text, formatting, and complex table forms, then verify saved content and rendered page images.
+description: Read, edit, and create HWP and HWPX documents through Hancom COM on Windows, including body text, formatting, and complex table forms, then verify saved content and rendered page images.
 ---
 
 # Edit existing HWP documents
@@ -14,10 +14,10 @@ Both `.hwp` and `.hwpx` are accepted; "HWP" below covers both. Hancom opens, sav
 Finish this before the first edit on a machine; repeat step 3 whenever a runner reports a Hancom build that no ledger entry lists.
 
 1. Hancom and security module: `scripts/setup-security-module.ps1 -Mode Check`; for anything missing, follow [security-module.md](references/security-module.md).
-2. API manuals: `scripts/setup-api-manuals.ps1 -Mode Check`. For any manual not `Verified`, ask the user either for a folder holding copies (`-Mode Install -From <folder>`) or for approval to download from the official archive (names, source, and sizes in [api-sources.md](references/api-sources.md); `-Mode Install -Download`).
+2. API manuals: `scripts/setup-api-manuals.ps1 -Mode Check`. For any manual not `Verified`, ask the user either for a folder holding copies (`-Mode Install -From <folder>`) or for approval to download from the official archive (names, source, and sizes in [api-sources.md](references/api-sources.md); `-Mode Install -Download`). Reading them needs poppler: `pdftotext -layout` into a scratch folder for searching, and `pdftoppm` for viewing pages with Read. If `pdftotext` is missing, ask the user to approve installing poppler (for example `scoop install poppler`).
 3. Probes: run every `scripts/probes/*.ps1` through `scripts/hwp-probe.ps1` and update [verified-api.md](references/verified-api.md) for this build.
 
-Setup is done when the security check passes, all four manuals report `Verified`, and every ledger entry lists the current build.
+Setup is done when the security check passes, all four manuals report `Verified`, `pdftotext` runs, and every ledger entry lists the current build.
 
 ## Workflow
 
@@ -35,11 +35,12 @@ Use Windows PowerShell 7 x64 in STA and an interactive desktop session. Windows 
 ```powershell
 pwsh.exe -NoProfile -STA -File "<skill>/scripts/hwp-edit.ps1" -Mode Inspect -InputPath "C:\work\form.hwp" -OutputPath "C:\work\inspection"
 pwsh.exe -NoProfile -STA -File "<skill>/scripts/hwp-edit.ps1" -Mode Edit -InputPath "C:\work\document.hwp" -OutputPath "C:\work\edited.hwp" -TaskScript "C:\work\edit-task.ps1"
+pwsh.exe -NoProfile -STA -File "<skill>/scripts/hwp-edit.ps1" -Mode Create -OutputPath "C:\work\new.hwpx" -TaskScript "C:\work\build-task.ps1"
 pwsh.exe -NoProfile -STA -File "<skill>/scripts/hwp-edit.ps1" -Mode Fill -InputPath "C:\work\form.hwp" -OutputPath "C:\work\filled.hwp" -PlanPath "C:\work\plan.json"
 pwsh.exe -NoProfile -STA -File "<skill>/scripts/hwp-edit.ps1" -Mode Render -InputPath "C:\work\filled.hwp" -OutputPath "C:\work\pages" -Dpi 150
 ```
 
-`-Mode ValidatePlan -PlanPath ...` validates plan syntax without launching Hancom. Render defaults to all pages; `-Pages 1,3` uses human page numbers. Internally `CreatePageImage` uses zero-based pages, 24-bit BMP, then converts to PNG without a PDF step.
+`-Mode Create` builds a new document: the same `Invoke-HwpEdit`/`Test-HwpEdit` callbacks run on Hancom's blank document, and the output extension (`.hwp` or `.hwpx`) sets the format; it takes no `-InputPath`. `-Mode ValidatePlan -PlanPath ...` validates plan syntax without launching Hancom. Render defaults to all pages; `-Pages 1,3` uses human page numbers. Internally `CreatePageImage` uses zero-based pages, 24-bit BMP, then converts to PNG without a PDF step.
 
 Plan shape (replace these names and values using the inspected document):
 

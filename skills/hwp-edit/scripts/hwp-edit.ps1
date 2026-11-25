@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$true)][ValidateSet('Inspect','Fill','Edit','Render','ValidatePlan')][string]$Mode,
+    [Parameter(Mandatory=$true)][ValidateSet('Inspect','Fill','Edit','Create','Render','ValidatePlan')][string]$Mode,
     [string]$InputPath,
     [string]$OutputPath,
     [string]$PlanPath,
@@ -32,13 +32,6 @@ function Read-Plan([string]$Path) {
     return $plan
 }
 function Normalize-Text([string]$Text) { return $Text.Replace("`r`n", "`n").Replace("`r", "`n") }
-function Read-Markup($Hwp) {
-    $xml = New-Object Xml.XmlDocument
-    $xml.PreserveWhitespace = $true
-    $xml.XmlResolver = $null
-    $xml.LoadXml([string]$Hwp.GetTextFile('HWPML2X',''))
-    return ,$xml
-}
 function Get-NodePath($Node) {
     $parts = New-Object 'System.Collections.Generic.List[string]'
     while ($Node -is [Xml.XmlElement]) {
@@ -99,37 +92,54 @@ if ($AllowTableGeometryChange -and $Mode -ne 'Edit') { throw 'AllowTableGeometry
 $plan = $null
 if ($Mode -in @('Fill','ValidatePlan')) { $plan = Read-Plan $PlanPath }
 if ($Mode -eq 'ValidatePlan') { Write-Output 'Plan valid; Hancom was not started.'; return }
-if (-not $InputPath -or -not $OutputPath) { throw 'InputPath and OutputPath are required.' }
-$source = (Resolve-Path -LiteralPath $InputPath).Path
-if (-not [IO.File]::Exists($source)) { throw 'Input must be an existing .hwp or .hwpx file.' }
-$format = Get-HwpDocumentFormat $source
-$extension = [IO.Path]::GetExtension($source).ToLowerInvariant()
+if (-not $OutputPath) { throw 'OutputPath is required.' }
 $output = [IO.Path]::GetFullPath($OutputPath)
 if (Test-Path -LiteralPath $output) { throw 'Output already exists; choose a new path.' }
 if (-not [IO.Directory]::Exists([IO.Path]::GetDirectoryName($output))) { throw 'Output parent directory must exist.' }
-if ($Mode -in @('Fill','Edit') -and [IO.Path]::GetExtension($output) -ine $extension) { throw "Edited output must keep the input extension ($extension); format conversion is not supported." }
+$source = $null; $sourceHash = $null
+if ($Mode -eq 'Create') {
+    # A new document starts from Hancom's blank document; the output extension picks the format.
+    if ($InputPath) { throw 'Create builds a new document; omit InputPath.' }
+    $format = Get-HwpDocumentFormat $output
+    $extension = [IO.Path]::GetExtension($output).ToLowerInvariant()
+} else {
+    if (-not $InputPath) { throw 'InputPath is required.' }
+    $source = (Resolve-Path -LiteralPath $InputPath).Path
+    if (-not [IO.File]::Exists($source)) { throw 'Input must be an existing .hwp or .hwpx file.' }
+    $format = Get-HwpDocumentFormat $source
+    $extension = [IO.Path]::GetExtension($source).ToLowerInvariant()
+    if ($Mode -in @('Fill','Edit') -and [IO.Path]::GetExtension($output) -ine $extension) { throw "Edited output must keep the input extension ($extension); format conversion is not supported." }
+}
 Assert-HwpAutomationHost
-if ($Mode -eq 'Edit') {
-    if (-not $TaskScript) { throw 'Edit requires TaskScript defining Invoke-HwpEdit and Test-HwpEdit.' }
+if ($Mode -in @('Edit','Create')) {
+    if (-not $TaskScript) { throw "$Mode requires TaskScript defining Invoke-HwpEdit and Test-HwpEdit." }
     . (Resolve-Path -LiteralPath $TaskScript).Path
     foreach ($command in @('Invoke-HwpEdit','Test-HwpEdit')) {
         if (-not (Get-Command $command -CommandType Function -ErrorAction SilentlyContinue)) { throw "TaskScript must define $command." }
     }
 }
-$sourceHash = Get-SharedFileHash $source
+if ($source) { $sourceHash = Get-SharedFileHash $source }
 if ($Mode -eq 'Fill' -and $sourceHash -ine $plan.sourceSha256) { throw 'Plan source hash mismatch; inspect this document again.' }
 $owner = $null; $hwp = $null; $temporary = $null; $success = $false; $build = 'unknown'
 try {
     # Hancom always works on a private snapshot, so a source open in the user's Hancom is fine.
-    $workDirectory = if ($Mode -in @('Fill','Edit')) { [IO.Path]::GetDirectoryName($output) } else { [IO.Directory]::CreateDirectory($output).FullName }
+    $workDirectory = if ($Mode -in @('Fill','Edit','Create')) { [IO.Path]::GetDirectoryName($output) } else { [IO.Directory]::CreateDirectory($output).FullName }
     $temporary = Join-Path $workDirectory ('.hwp-edit-' + [Guid]::NewGuid().ToString('N') + $extension)
-    Copy-SharedFile $source $temporary
-    if ((Get-SharedFileHash $temporary) -cne $sourceHash) { throw 'Source changed while it was being copied; try again.' }
+    if ($source) {
+        Copy-SharedFile $source $temporary
+        if ((Get-SharedFileHash $temporary) -cne $sourceHash) { throw 'Source changed while it was being copied; try again.' }
+    }
     $owner = Start-OwnedHwp; $hwp = $owner.Hwp
     Initialize-OwnedHwp $owner
-    Open-HwpDocument $hwp $temporary $format
-    if ($Mode -eq 'Inspect') {
-        $xml = Read-Markup $hwp
+    if ($source) { Open-HwpDocument $hwp $temporary $format }
+    if ($Mode -eq 'Create') {
+        Invoke-HwpEdit -Hwp $hwp | Out-Null; Assert-Task $hwp
+        if (-not $hwp.SaveAs($temporary,$format,'')) { throw 'Save failed.' }
+        $hwp.Clear(1) | Out-Null
+        Open-HwpDocument $hwp $temporary $format
+        Assert-Task $hwp
+    } elseif ($Mode -eq 'Inspect') {
+        $xml = Read-HwpMarkup $hwp
         $xml.Save((Join-Path $output 'document.xml'))
         [IO.File]::WriteAllText((Join-Path $output 'document.txt'), [string]$hwp.GetTextFile('TEXT',''), [Text.UTF8Encoding]::new($false))
         $fields = foreach ($name in ([string]$hwp.GetFieldList(1,0)).Split([char]2)) {
@@ -161,7 +171,7 @@ try {
         }
         Write-JsonFile ([ordered]@{source=$source; sourceSha256=$sourceHash; hancomBuild=$owner.Build; dpi=$Dpi; images=@($images); visuallyReviewed=$false}) (Join-Path $output 'pages.json')
     } else {
-        $geometry = Get-Geometry (Read-Markup $hwp)
+        $geometry = Get-Geometry (Read-HwpMarkup $hwp)
         if ($Mode -eq 'Fill') {
             $fieldSnapshot = Get-FieldSnapshot $hwp
             Assert-Fields $hwp $plan $false
@@ -176,7 +186,7 @@ try {
             Assert-Fields $hwp $plan $true
             Assert-ProtectedFields $hwp $fieldSnapshot $plan
         } else { Assert-Task $hwp }
-        if (-not $AllowTableGeometryChange -and (Get-Geometry (Read-Markup $hwp)) -cne $geometry) { throw 'Table nesting/geometry changed; result was not published.' }
+        if (-not $AllowTableGeometryChange -and (Get-Geometry (Read-HwpMarkup $hwp)) -cne $geometry) { throw 'Table nesting/geometry changed; result was not published.' }
     }
     $success = $true
 } finally {
@@ -185,8 +195,8 @@ try {
         $hwp = $null
         if ($null -ne $owner) { $build = $owner.Build }
         if ((Stop-OwnedHwp $owner -ClearDocument) -eq 'terminated') { throw 'Owned Hancom did not exit normally and was stopped; output was not published.' }
-        if ((Get-SharedFileHash $source) -cne $sourceHash) { throw 'Source changed; output was not published.' }
-        if ($success -and $Mode -in @('Fill','Edit')) { [IO.File]::Move($temporary,$output) }
+        if ($source -and (Get-SharedFileHash $source) -cne $sourceHash) { throw 'Source changed; output was not published.' }
+        if ($success -and $Mode -in @('Fill','Edit','Create')) { [IO.File]::Move($temporary,$output) }
     } finally {
         if ($temporary -and [IO.File]::Exists($temporary)) { Remove-Item -LiteralPath $temporary }
     }

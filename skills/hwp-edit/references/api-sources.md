@@ -45,7 +45,13 @@ Check a copy: `git hash-object --no-filters -- <file>` must equal the blob SHA a
 
 Terms: the page allows free personal non-commercial use and requires a Hancom license for commercial use. The manuals therefore stay outside this skill and its repository.
 
-Installed copies: `scripts/setup-api-manuals.ps1` keeps the four official files in `%LOCALAPPDATA%\Hancom\HwpAutomation\manuals\` and accepts a file only when its blob SHA matches; it pins the same SHAs as the table above, so update both together. It copies from a folder the user names (`-From`) or downloads from the archive (`-Download`) after the user approves. Read the PDFs by page.
+Installed copies: `scripts/setup-api-manuals.ps1` keeps the four official files in `%LOCALAPPDATA%\Hancom\HwpAutomation\manuals\` and accepts a file only when its blob SHA matches; it pins the same SHAs as the table above, so update both together. It copies from a folder the user names (`-From`) or downloads from the archive (`-Download`) after the user approves. Search them through `pdftotext -layout` output kept in a scratch folder; section headings such as `57) FindReplace :` locate parameter sets.
+
+## UI help
+
+The help that ships with the installed build names the options users see and says what they do, which maps a user's wording to the setting behind it. It documents the UI, not COM names, so the setting still needs a probe. The same name can label different settings: "한 줄로 입력" appears on both 문단 모양 [확장] and 표/셀 속성 [셀].
+
+It is `Resource\Hwp\Help\ko-KR\Hwp.chm` beside the `hwp.exe` that COM launches (version policy above). Copy it to a scratch folder without spaces in its path and run `hh.exe -decompile out Hwp.chm` there; pages are HTML in code page 949, e.g. `table\tableattribute\table(cellattribute).htm`, `format\paragraph\paragraph_expanded.htm`.
 
 ## Installed type library
 

@@ -4,7 +4,7 @@
 
 The Edit runner accepts document-specific COM callbacks; it is not a fixed report generator. Locate paragraphs by verified text and context, inspect their current styles, and apply only the requested change. Confirm occurrence counts before global replacement. Use native search/selection and InsertText for text changes; use documented CharShape/ParagraphShape actions for formatting. Before constructing an action, check [verified-api.md](verified-api.md) for the current build; anything missing there gets looked up, probed, and recorded as that file describes. Do not assume document positions survive an earlier insertion or deletion.
 
-The verification callback must independently re-locate the targets and check the intended text, formatting, or structure before saving and again after reopen. Preserve unrelated sections, headers, footers, images, fields, and native controls. For requested table geometry edits, `-AllowTableGeometryChange` suppresses only the default geometry equality check; the callback must assert the expected replacement geometry and unaffected tables.
+The verification callback must independently re-locate the targets and check the intended text, formatting, or structure before saving and again after reopen; `Read-HwpMarkup $Hwp` returns the open document as HWPML for checking shapes and structure. Preserve unrelated sections, headers, footers, images, fields, and native controls. For requested table geometry edits, `-AllowTableGeometryChange` suppresses only the default geometry equality check; the callback must assert the expected replacement geometry and unaffected tables.
 
 ## Unnamed, merged, and nested cells
 

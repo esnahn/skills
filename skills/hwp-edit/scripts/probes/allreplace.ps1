@@ -1,4 +1,4 @@
-# AllReplace (FindReplace parameter set): does whole-document replacement work, and does Execute's
+﻿# AllReplace (FindReplace parameter set): does whole-document replacement work, and does Execute's
 # return value tell whether anything was replaced? Ledger: references/verified-api.md (AllReplace).
 function Invoke-HwpProbe {
     param($Hwp)
